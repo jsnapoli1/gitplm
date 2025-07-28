@@ -98,8 +98,8 @@ The convention used by GitPLM is: `CCC-NNN-VVVV`
 
 ## Partmaster
 
-A single [`partmaster.csv`](example/partmaster.csv) file is used for the entire
-organization and contains internal part numbers (IPN) for all assets used to
+A single [`partmaster.csv`](example/partmaster.csv) file or multiple CSV files
+can be used to specify the internal part numbers (IPN) for all assets used to
 build a product. For externally sourced parts, purchasing information such as
 manufacturer part number (MPN) is also included.
 
