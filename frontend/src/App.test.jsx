@@ -26,4 +26,11 @@ test('handles non-array parts response', async () => {
   await waitFor(() => {
     expect(screen.getByText('Parts for RES')).toBeInTheDocument();
   });
+
+  test('renders search bar and filter button', () => {
+  render(<App />);
+  const inputs = screen.getAllByPlaceholderText(/Search categories/i);
+  expect(inputs.length).toBeGreaterThan(0);
+  const buttons = screen.getAllByRole('button', { name: /filter/i });
+  expect(buttons.length).toBeGreaterThan(0);
 });
