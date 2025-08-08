@@ -56,15 +56,19 @@ or
 
 ### Docker
 
-Build a container image and run GitPLM with Docker Desktop:
+Build a container image and run GitPLM with Docker:
 
 ```bash
 docker build -t gitplm .
-# run the tool from your project directory
 docker run --rm -v "$(pwd)":/workspace -w /workspace gitplm -version
 ```
 
-Use the command line flags as needed when invoking the container.
+Use the command line flags as needed when invoking the container. To start the
+HTTP server and serve the frontend, expose port 8080:
+
+```bash
+docker run --rm -p 8080:8080 gitplm -http -pmDir /workspace
+```
 
 ## Usage
 
