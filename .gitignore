@@ -4,3 +4,7 @@ gitplm.yaml
 gitplm.yml
 .gitplm.yaml
 .gitplm.yml
+
+frontend/node_modules
+frontend/dist
+
