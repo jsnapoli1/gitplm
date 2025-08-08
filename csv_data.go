@@ -77,6 +77,9 @@ func createBlankPartmasterCSV(dir string) (*CSVFile, error) {
 	headers := []string{"IPN", "Description", "Footprint", "Value", "Manufacturer", "MPN", "Datasheet", "Priority", "Checked"}
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
+		tmpDir := os.TempDir()
+		fmt.Printf("Warning: could not create directory %s: %v; using %s instead\n", dir, err, tmpDir)
+		dir = tmpDir
 		return nil, fmt.Errorf("error creating directory %s: %v", dir, err)
 	}
 
