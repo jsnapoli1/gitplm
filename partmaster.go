@@ -109,6 +109,14 @@ func loadPartmasterFromDir(dir string) (partmaster, error) {
 		return pm, fmt.Errorf("error finding CSV files in directory %s: %v", dir, err)
 	}
 
+	if len(files) == 0 {
+		_, err := createBlankPartmasterCSV(dir)
+		if err != nil {
+			return pm, err
+		}
+		files = []string{filepath.Join(dir, "partmaster.csv")}
+	}
+
 	for _, file := range files {
 		var temp partmaster
 		err := loadCSV(file, &temp)
