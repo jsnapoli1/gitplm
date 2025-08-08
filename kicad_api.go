@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/samber/lo"
@@ -37,6 +38,19 @@ type KiCadPartDetail struct {
 	SymbolIDStr    string                    `json:"symbolIdStr,omitempty"`
 	ExcludeFromBOM string                    `json:"exclude_from_bom,omitempty"`
 	Fields         map[string]KiCadPartField `json:"fields,omitempty"`
+	Revision       string                    `json:"revision,omitempty"`
+}
+
+// PartSource represents a manufacturer/MPN pair for a part
+type PartSource struct {
+	Manufacturer string `json:"manufacturer"`
+	MPN          string `json:"mpn"`
+}
+
+// PartUpdateRequest captures fields that can be updated for a part
+type PartUpdateRequest struct {
+	Description string       `json:"description"`
+	Sources     []PartSource `json:"sources"`
 }
 
 // KiCadPartField represents a field in a KiCad part
@@ -154,12 +168,48 @@ func (s *KiCadServer) findColumnIndex(file *CSVFile, columnName string) int {
 	return -1
 }
 
+// findPart locates a part by IPN and returns its file and row index
+func (s *KiCadServer) findPart(partID string) (*CSVFile, int) {
+	for _, file := range s.csvCollection.Files {
+		ipnIdx := s.findColumnIndex(file, "IPN")
+		for i, row := range file.Rows {
+			if ipnIdx >= 0 && len(row) > ipnIdx && row[ipnIdx] == partID {
+				return file, i
+			}
+		}
+	}
+	return nil, -1
+}
+
+// ensureColumn makes sure a column exists in the file and returns its index
+func (s *KiCadServer) ensureColumn(file *CSVFile, header string) int {
+	idx := s.findColumnIndex(file, header)
+	if idx == -1 {
+		file.Headers = append(file.Headers, header)
+		idx = len(file.Headers) - 1
+		for i, row := range file.Rows {
+			file.Rows[i] = append(row, "")
+		}
+	}
+	return idx
+}
+
 // extractCategory extracts the CCC component from an IPN
 func (s *KiCadServer) extractCategory(ipnStr string) string {
 	// IPN format: CCC-NNN-VVVV
 	re := regexp.MustCompile(`^([A-Z][A-Z][A-Z])-(\d\d\d)-(\d\d\d\d)$`)
 	matches := re.FindStringSubmatch(ipnStr)
 	if len(matches) >= 2 {
+		return matches[1]
+	}
+	return ""
+}
+
+// extractRevision extracts the revision (VVVV) component from an IPN
+func (s *KiCadServer) extractRevision(ipnStr string) string {
+	re := regexp.MustCompile(`^[A-Z]{3}-\d{3}-(\d{4})$`)
+	matches := re.FindStringSubmatch(ipnStr)
+	if len(matches) == 2 {
 		return matches[1]
 	}
 	return ""
@@ -346,12 +396,91 @@ func (s *KiCadServer) getPartDetail(partID string) *KiCadPartDetail {
 					SymbolIDStr:    s.getSymbolIDFromCategory(category),
 					ExcludeFromBOM: "false", // Default to include in BOM
 					Fields:         fields,
+					Revision:       s.extractRevision(partID),
 				}
 			}
 		}
 	}
 
 	return nil
+}
+
+// updatePart updates editable fields for a part and saves to disk
+func (s *KiCadServer) updatePart(partID string, req PartUpdateRequest) error {
+	file, rowIdx := s.findPart(partID)
+	if file == nil {
+		return fmt.Errorf("part not found")
+	}
+	row := file.Rows[rowIdx]
+	if len(row) < len(file.Headers) {
+		padded := make([]string, len(file.Headers))
+		copy(padded, row)
+		row = padded
+		file.Rows[rowIdx] = row
+	}
+
+	if req.Description != "" {
+		descIdx := s.ensureColumn(file, "Description")
+		file.Rows[rowIdx][descIdx] = req.Description
+	}
+
+	for i, src := range req.Sources {
+		mfrHeader := "Manufacturer"
+		mpnHeader := "MPN"
+		if i > 0 {
+			idx := i + 1
+			mfrHeader = fmt.Sprintf("Manufacturer%d", idx)
+			mpnHeader = fmt.Sprintf("MPN%d", idx)
+		}
+		mfrIdx := s.ensureColumn(file, mfrHeader)
+		mpnIdx := s.ensureColumn(file, mpnHeader)
+		file.Rows[rowIdx][mfrIdx] = src.Manufacturer
+		file.Rows[rowIdx][mpnIdx] = src.MPN
+	}
+
+	if err := saveCSVFile(file); err != nil {
+		return err
+	}
+	return s.loadCSVCollection()
+}
+
+// startNewRevision creates a new part revision and returns its details
+func (s *KiCadServer) startNewRevision(partID string) (*KiCadPartDetail, error) {
+	file, rowIdx := s.findPart(partID)
+	if file == nil {
+		return nil, fmt.Errorf("part not found")
+	}
+
+	ipnIdx := s.findColumnIndex(file, "IPN")
+	if ipnIdx < 0 {
+		return nil, fmt.Errorf("IPN column missing")
+	}
+
+	row := file.Rows[rowIdx]
+	parts := strings.Split(row[ipnIdx], "-")
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("invalid IPN format")
+	}
+	rev, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return nil, fmt.Errorf("invalid revision")
+	}
+	rev++
+	parts[2] = fmt.Sprintf("%04d", rev)
+	newIPN := strings.Join(parts, "-")
+
+	newRow := make([]string, len(file.Headers))
+	copy(newRow, row)
+	newRow[ipnIdx] = newIPN
+	file.Rows = append(file.Rows, newRow)
+
+	if err := saveCSVFile(file); err != nil {
+		return nil, err
+	}
+	if err := s.loadCSVCollection(); err != nil {
+		return nil, err
+	}
+	return s.getPartDetail(newIPN), nil
 }
 
 // getSymbolIDFromCategory generates a symbol ID based on category
@@ -438,7 +567,16 @@ func (s *KiCadServer) partsByCategoryHandler(w http.ResponseWriter, r *http.Requ
 	_ = json.NewEncoder(w).Encode(parts)
 }
 
-// partDetailHandler handles the part detail endpoint
+// partsRouter routes part detail and revision endpoints
+func (s *KiCadServer) partsRouter(w http.ResponseWriter, r *http.Request) {
+	if strings.HasSuffix(r.URL.Path, "/revision") {
+		s.partRevisionHandler(w, r)
+		return
+	}
+	s.partDetailHandler(w, r)
+}
+
+// partDetailHandler handles GET/PUT for part details
 func (s *KiCadServer) partDetailHandler(w http.ResponseWriter, r *http.Request) {
 	if !s.authenticate(r) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -449,12 +587,54 @@ func (s *KiCadServer) partDetailHandler(w http.ResponseWriter, r *http.Request) 
 	path := strings.TrimPrefix(r.URL.Path, "/v1/parts/")
 	partID := strings.TrimSuffix(path, ".json")
 
-	part := s.getPartDetail(partID)
-	if part == nil {
-		http.Error(w, "Part not found", http.StatusNotFound)
+	switch r.Method {
+	case http.MethodGet:
+		part := s.getPartDetail(partID)
+		if part == nil {
+			http.Error(w, "Part not found", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(part)
+	case http.MethodPut:
+		var req PartUpdateRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			return
+		}
+		if err := s.updatePart(partID, req); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		part := s.getPartDetail(partID)
+		if part == nil {
+			http.Error(w, "Part not found", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(part)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// partRevisionHandler handles creating a new revision for a part
+func (s *KiCadServer) partRevisionHandler(w http.ResponseWriter, r *http.Request) {
+	if !s.authenticate(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	path := strings.TrimPrefix(r.URL.Path, "/v1/parts/")
+	partID := strings.TrimSuffix(path, "/revision")
+	part, err := s.startNewRevision(partID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(part)
 }
@@ -489,7 +669,7 @@ func StartKiCadServer(pmDir, token string, port int) error {
 	http.HandleFunc("/v1/", server.rootHandler)
 	http.HandleFunc("/v1/categories.json", server.categoriesHandler)
 	http.HandleFunc("/v1/parts/category/", server.partsByCategoryHandler)
-	http.HandleFunc("/v1/parts/", server.partDetailHandler)
+	http.HandleFunc("/v1/parts/", server.partsRouter)
 
 	// Add a health check endpoint
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

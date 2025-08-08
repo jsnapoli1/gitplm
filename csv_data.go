@@ -80,6 +80,7 @@ func createBlankPartmasterCSV(dir string) (*CSVFile, error) {
 		tmpDir := os.TempDir()
 		fmt.Printf("Warning: could not create directory %s: %v; using %s instead\n", dir, err, tmpDir)
 		dir = tmpDir
+		return nil, fmt.Errorf("error creating directory %s: %v", dir, err)
 	}
 
 	path := filepath.Join(dir, "partmaster.csv")
@@ -162,6 +163,36 @@ func (c *CSVFileCollection) GetCombinedPartmaster() (partmaster, error) {
 	}
 
 	return pm, nil
+}
+
+// saveCSVFile writes a CSVFile back to disk, preserving headers and rows
+func saveCSVFile(file *CSVFile) error {
+	f, err := os.Create(file.Path)
+	if err != nil {
+		return fmt.Errorf("error opening file %s: %w", file.Path, err)
+	}
+	defer f.Close()
+
+	w := csv.NewWriter(f)
+	w.Comma = ','
+
+	if err := w.Write(file.Headers); err != nil {
+		return fmt.Errorf("error writing headers: %w", err)
+	}
+
+	for _, row := range file.Rows {
+		if len(row) < len(file.Headers) {
+			padded := make([]string, len(file.Headers))
+			copy(padded, row)
+			row = padded
+		}
+		if err := w.Write(row); err != nil {
+			return fmt.Errorf("error writing row: %w", err)
+		}
+	}
+
+	w.Flush()
+	return w.Error()
 }
 
 // parseFileAsPartmaster attempts to parse a CSV file as partmaster format

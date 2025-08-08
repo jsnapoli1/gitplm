@@ -115,6 +115,11 @@ func loadPartmasterFromDir(dir string) (partmaster, error) {
 			return pm, err
 		}
 		files = []string{csvFile.Path}
+		_, err := createBlankPartmasterCSV(dir)
+		if err != nil {
+			return pm, err
+		}
+		files = []string{filepath.Join(dir, "partmaster.csv")}
 	}
 
 	for _, file := range files {
