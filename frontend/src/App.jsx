@@ -22,7 +22,11 @@ function App() {
   }, []);
 
   const loadParts = (id) => {
+    if (id === selectedCategory) {
+      return;
+    }
     setSelectedCategory(id);
+    setParts([]);
     axios.get(`${API_BASE}/v1/parts/category/${id}.json`).then(res => {
       if (Array.isArray(res.data)) {
         setParts(res.data);
