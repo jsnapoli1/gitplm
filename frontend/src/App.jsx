@@ -22,9 +22,15 @@ function App() {
   const loadParts = (id) => {
     setSelectedCategory(id);
     axios.get(`${API_BASE}/v1/parts/category/${id}.json`).then(res => {
-      setParts(res.data);
+      if (Array.isArray(res.data)) {
+        setParts(res.data);
+      } else {
+        console.error('Unexpected parts response', res.data);
+        setParts([]);
+      }
     }).catch(err => {
       console.error('Failed to load parts', err);
+      setParts([]);
     });
   };
 
