@@ -54,6 +54,18 @@ or
 
 - clone the Git repo and run: `go run .`
 
+### Docker
+
+Build a container image and run GitPLM with Docker Desktop:
+
+```bash
+docker build -t gitplm .
+# run the tool from your project directory
+docker run --rm -v "$(pwd)":/workspace -w /workspace gitplm -version
+```
+
+Use the command line flags as needed when invoking the container.
+
 ## Usage
 
 Type `gitplm` from a shell to see commandline options:
