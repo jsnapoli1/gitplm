@@ -95,7 +95,12 @@ func (s *KiCadServer) loadCSVCollection() error {
 
 	collection, err := loadAllCSVFiles(s.pmDir)
 	if err != nil {
-		return fmt.Errorf("failed to load CSV files from %s: %w", s.pmDir, err)
+		// If loading fails, create a blank partmaster so the server can start
+		csvFile, err2 := createBlankPartmasterCSV(s.pmDir)
+		if err2 != nil {
+			return fmt.Errorf("failed to load CSV files from %s: %w", s.pmDir, err)
+		}
+		collection = &CSVFileCollection{Files: []*CSVFile{csvFile}}
 	}
 
 	s.csvCollection = collection
