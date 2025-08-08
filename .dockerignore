@@ -4,3 +4,5 @@
 *.svg
 example/
 assets/
+frontend/node_modules
+frontend/dist

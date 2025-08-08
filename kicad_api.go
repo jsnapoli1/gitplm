@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -248,7 +250,7 @@ func (s *KiCadServer) getPartsByCategory(categoryID string) []KiCadPartSummary {
 		// Check if this file belongs to the category
 		fileName := strings.TrimSuffix(strings.ToUpper(file.Name), ".CSV")
 		fileCategory := ""
-		
+
 		// Try to get category from filename
 		if len(fileName) == 3 {
 			fileCategory = fileName
@@ -325,7 +327,7 @@ func (s *KiCadServer) getPartDetail(partID string) *KiCadPartDetail {
 				for i, header := range file.Headers {
 					if i < len(row) && row[i] != "" && header != "" {
 						fields[header] = KiCadPartField{Value: row[i]}
-						
+
 						// Set name from Description field
 						if header == "Description" {
 							partName = row[i]
@@ -468,6 +470,14 @@ func StartKiCadServer(pmDir, token string, port int) error {
 	server, err := NewKiCadServer(pmDir, token)
 	if err != nil {
 		return fmt.Errorf("failed to create KiCad server: %w", err)
+	}
+
+	// Serve frontend files if they exist
+	if execPath, err := os.Executable(); err == nil {
+		staticDir := filepath.Join(filepath.Dir(execPath), "frontend", "dist")
+		if _, err := os.Stat(staticDir); err == nil {
+			http.Handle("/", http.FileServer(http.Dir(staticDir)))
+		}
 	}
 
 	// Set up routes
