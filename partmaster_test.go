@@ -43,3 +43,34 @@ func TestPartmaster(t *testing.T) {
 		t.Fatalf("Error finding part CAP-001-1002: %v", err)
 	}
 }
+
+func TestPartmasterFindPartSources(t *testing.T) {
+	initCSV()
+	pm := partmaster{}
+	err := gocsv.UnmarshalBytes([]byte(pmIn), &pm)
+	if err != nil {
+		t.Fatalf("Error parsing pmIn: %v", err)
+	}
+
+	parts, err := pm.findPartSources("CAP-001-1001")
+	if err != nil {
+		t.Fatalf("Error finding sources for CAP-001-1001: %v", err)
+	}
+
+	if len(parts) != 2 {
+		t.Fatalf("Expected 2 sources for CAP-001-1001, got %v", len(parts))
+	}
+
+	if parts[0].MPN != "abc2322" || parts[1].MPN != "10045" {
+		t.Errorf("Sources not sorted by priority: got %v then %v", parts[0].MPN, parts[1].MPN)
+	}
+
+	for i, p := range parts {
+		if p.Description != "superduper cap" {
+			t.Errorf("Wrong description for source %v: %v", i, p.Description)
+		}
+		if p.Value != "10k" {
+			t.Errorf("Wrong value for source %v: %v", i, p.Value)
+		}
+	}
+}
