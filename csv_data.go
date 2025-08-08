@@ -40,7 +40,7 @@ func loadCSVRaw(filePath string) (*CSVFile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error reading headers from %s: %v", filePath, err)
 	}
-	
+
 	// Trim whitespace from headers
 	for i := range headers {
 		headers[i] = strings.TrimSpace(headers[i])
@@ -72,6 +72,38 @@ func loadCSVRaw(filePath string) (*CSVFile, error) {
 	}, nil
 }
 
+// createBlankPartmasterCSV creates an empty partmaster.csv file with standard headers
+func createBlankPartmasterCSV(dir string) (*CSVFile, error) {
+	headers := []string{"IPN", "Description", "Footprint", "Value", "Manufacturer", "MPN", "Datasheet", "Priority", "Checked"}
+
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("error creating directory %s: %v", dir, err)
+	}
+
+	path := filepath.Join(dir, "partmaster.csv")
+	file, err := os.Create(path)
+	if err != nil {
+		return nil, fmt.Errorf("error creating file %s: %v", path, err)
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
+	if err := writer.Write(headers); err != nil {
+		return nil, fmt.Errorf("error writing headers to %s: %v", path, err)
+	}
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return nil, fmt.Errorf("error finalizing file %s: %v", path, err)
+	}
+
+	return &CSVFile{
+		Name:    filepath.Base(path),
+		Path:    path,
+		Headers: headers,
+		Rows:    [][]string{},
+	}, nil
+}
+
 // loadAllCSVFiles loads all CSV files from a directory
 func loadAllCSVFiles(dir string) (*CSVFileCollection, error) {
 	collection := &CSVFileCollection{
@@ -81,6 +113,15 @@ func loadAllCSVFiles(dir string) (*CSVFileCollection, error) {
 	files, err := filepath.Glob(filepath.Join(dir, "*.csv"))
 	if err != nil {
 		return nil, fmt.Errorf("error finding CSV files in directory %s: %v", dir, err)
+	}
+
+	if len(files) == 0 {
+		csvFile, err := createBlankPartmasterCSV(dir)
+		if err != nil {
+			return nil, err
+		}
+		collection.Files = append(collection.Files, csvFile)
+		return collection, nil
 	}
 
 	for _, filePath := range files {
@@ -94,7 +135,11 @@ func loadAllCSVFiles(dir string) (*CSVFileCollection, error) {
 	}
 
 	if len(collection.Files) == 0 {
-		return nil, fmt.Errorf("no valid CSV files found in directory %s", dir)
+		csvFile, err := createBlankPartmasterCSV(dir)
+		if err != nil {
+			return nil, err
+		}
+		collection.Files = append(collection.Files, csvFile)
 	}
 
 	return collection, nil
