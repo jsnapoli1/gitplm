@@ -5,12 +5,15 @@ const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
 
 function App() {
   const [categories, setCategories] = useState([]);
+  const [filteredCategories, setFilteredCategories] = useState([]);
   const [parts, setParts] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     axios.get(`${API_BASE}/v1/categories.json`).then(res => {
       setCategories(res.data);
+      setFilteredCategories(res.data);
     }).catch(err => {
       console.error('Failed to load categories', err);
     });
@@ -25,14 +28,33 @@ function App() {
     });
   };
 
+  const handleFilter = () => {
+    const term = searchTerm.toLowerCase();
+    setFilteredCategories(
+      categories.filter(cat =>
+        cat.id.toLowerCase().includes(term) ||
+        (cat.name || '').toLowerCase().includes(term)
+      )
+    );
+  };
+
   return (
     <div style={{ padding: '1rem', fontFamily: 'Arial, sans-serif' }}>
       <h1>GitPLM</h1>
       <div style={{ display: 'flex', gap: '2rem' }}>
         <div>
           <h2>Categories</h2>
+          <div style={{ marginBottom: '0.5rem' }}>
+            <input
+              type="text"
+              placeholder="Search categories"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+            <button onClick={handleFilter} style={{ marginLeft: '0.5rem' }}>Filter</button>
+          </div>
           <ul>
-            {categories.map(cat => (
+            {filteredCategories.map(cat => (
               <li key={cat.id}>
                 <button onClick={() => loadParts(cat.id)}>
                   {cat.id} - {cat.name}
