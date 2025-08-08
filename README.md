@@ -54,6 +54,18 @@ or
 
 - clone the Git repo and run: `go run .`
 
+### Docker deployment
+
+You can build and run GitPLM in a container:
+
+```bash
+docker build -t gitplm .
+docker run --rm -v "$(pwd)":/workspace gitplm -release PCB-019-0001
+```
+
+Mount your project directory into the container and adjust the `-release`
+argument for your use case.
+
 ## Usage
 
 Type `gitplm` from a shell to see commandline options:
